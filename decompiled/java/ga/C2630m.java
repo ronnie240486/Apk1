@@ -248,9 +248,7 @@ public final class C2630m {
             AbstractC3331m.m6764n(str, strM6757g);
         }
         if (strM6757g.equals("")) {
-            String string = UUID.randomUUID().toString();
-            System.out.println(string);
-            strM6757g = string.replace(AbstractC0032a.m165s("nQ==\n", "sOUUl9qDS8o=\n"), "").substring(0, 12).toUpperCase();
+            strM6757g = org.bitspark.android.MacId.get12(this.f9146a);
             AbstractC3331m.m6764n(str, strM6757g);
         }
         Log.m5049i(f9143c, AbstractC2460q.m5496j("sK2PBQdmhcjCrI0aHXGFlsI=\n", "4sjobHQS4Lo=\n", new StringBuilder(), strM6757g));
