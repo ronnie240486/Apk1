@@ -29,6 +29,8 @@ Este repositório contém a saída de uma desmontagem estática do arquivo `P2Se
 | `original/` | DEXs, tabela de recursos, manifestos binário/decodificado e metadados do Apktool |
 | `analysis/` | Relatórios de inspeção, análise estática e strings relevantes dos binários |
 | `jadx-project/` | Arquivos Gradle mínimos gerados pelo JADX para referência estrutural |
+| `integration/` | Camada de referência para as rotas universais descritas em `main(3).pdf` |
+| `analysis/pdf_main3/` | PDF recebido, texto extraído e resumo do contrato aplicado |
 
 ## Principais observações
 
@@ -37,6 +39,12 @@ O manifesto declara permissões de acesso à Internet, estado de rede e Wi-Fi, a
 Entre os componentes declarados estão a atividade principal `org.bitspark.android.Spark`, o `BroadcastReceiver` `org.bitspark.android.broadcast.ActionReceiver` e o serviço `com.tvbus.engine.TVService`. O receiver reage a boot concluído, alterações de conectividade, tela ligada/desligada e ajuste de horário. Esses dados devem ser interpretados como propriedades declaradas do pacote, não como prova isolada de comportamento malicioso.
 
 Grande parte da lógica de negócio e de vários modelos Java é delegada a métodos nativos. O pacote contém bibliotecas como `libgojni.so`, `libtvcore.so`, `libffmpegJNI.so`, `libijkplayer.so`, `libijkcodec.so`, `libBugly.so` e `libmarsxlog.so` para as arquiteturas `arm64-v8a` e `armeabi-v7a`. Portanto, a recuperação Java não representa integralmente a implementação nativa.
+
+## Integração universal derivada do PDF
+
+O PDF recebido foi analisado e aplicado como uma camada isolada em `integration/`. Ela implementa, em código Android/Java de referência, configuração por MAC, atualização, heartbeat, avisos, ACKs, comandos remotos, falha de reprodução e failover, usando HTTPS obrigatório e sem cache HTTP para status ou playlists.
+
+O documento não identifica o `P2Server` como um dos appIds universais. O APK desmontado também mantém um contrato legado próprio e lógica protegida em bibliotecas nativas. Por isso, o projeto não altera arbitrariamente o backend legado nem escolhe `nexus` ou outra família sem confirmação do desenvolvedor; a camada está pronta para ser conectada ao projeto-fonte Android real quando o appId correto for informado.
 
 ## Como consultar
 
