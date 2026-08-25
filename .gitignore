@@ -1,0 +1,20 @@
+# Local reverse-engineering tools and temporary logs
+/tools/
+*.log
+*.zip
+*.jar
+
+# Original packaged application is intentionally excluded by default
+*.apk
+
+# Build/editor artifacts
+.gradle/
+build/
+.idea/
+.vscode/
+*.iml
+
+# Secrets and machine-local files
+.env
+*.keystore
+*.jks

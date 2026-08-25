@@ -1,0 +1,41 @@
+package androidx.media3.datasource;
+
+import androidx.media3.common.util.Assertions;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.common.util.Util;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+@UnstableApi
+public final class ByteArrayDataSink implements DataSink {
+    private ByteArrayOutputStream stream;
+
+    @Override
+    public void close() throws IOException {
+        ((ByteArrayOutputStream) Util.castNonNull(this.stream)).close();
+    }
+
+    public byte[] getData() {
+        ByteArrayOutputStream byteArrayOutputStream = this.stream;
+        if (byteArrayOutputStream == null) {
+            return null;
+        }
+        return byteArrayOutputStream.toByteArray();
+    }
+
+    @Override
+    public void open(DataSpec dataSpec) {
+        long j10 = dataSpec.length;
+        if (j10 == -1) {
+            this.stream = new ByteArrayOutputStream();
+        } else {
+            Assertions.checkArgument(j10 <= 2147483647L);
+            this.stream = new ByteArrayOutputStream((int) dataSpec.length);
+        }
+    }
+
+    @Override
+    public void write(byte[] bArr, int i6, int i10) {
+        ((ByteArrayOutputStream) Util.castNonNull(this.stream)).write(bArr, i6, i10);
+    }
+}

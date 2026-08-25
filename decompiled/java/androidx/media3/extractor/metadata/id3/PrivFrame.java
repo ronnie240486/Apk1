@@ -1,0 +1,40 @@
+package androidx.media3.extractor.metadata.id3;
+
+import androidx.media3.common.util.UnstableApi;
+import java.util.Arrays;
+import java.util.Objects;
+
+@UnstableApi
+public final class PrivFrame extends Id3Frame {
+
+    public static final String f3096ID = "PRIV";
+    public final String owner;
+    public final byte[] privateData;
+
+    public PrivFrame(String str, byte[] bArr) {
+        super(f3096ID);
+        this.owner = str;
+        this.privateData = bArr;
+    }
+
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || PrivFrame.class != obj.getClass()) {
+            return false;
+        }
+        PrivFrame privFrame = (PrivFrame) obj;
+        return Objects.equals(this.owner, privFrame.owner) && Arrays.equals(this.privateData, privFrame.privateData);
+    }
+
+    public int hashCode() {
+        String str = this.owner;
+        return Arrays.hashCode(this.privateData) + ((527 + (str != null ? str.hashCode() : 0)) * 31);
+    }
+
+    @Override
+    public String toString() {
+        return this.f3093id + ": owner=" + this.owner;
+    }
+}

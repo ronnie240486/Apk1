@@ -1,0 +1,21 @@
+version: 3.0.3
+apkFileName: P2Server10.4.1.apk
+usesFramework:
+  ids:
+  - 1
+sdkInfo:
+  minSdkVersion: 21
+  targetSdkVersion: 35
+versionInfo:
+  versionCode: 1041
+  versionName: 10.4.1
+resourcesInfo:
+  packageId: 127
+doNotCompress:
+- arsc
+- jpeg
+- jpg
+- ogg
+- png
+- assets/dexopt/baseline.prof
+- assets/dexopt/baseline.profm

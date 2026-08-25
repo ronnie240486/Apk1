@@ -1,0 +1,9 @@
+# Keep reverse-engineering outputs identifiable in GitHub
+*.so binary linguist-language=C
+*.dex binary linguist-language=Smali
+*.arsc binary linguist-language=Raw
+*.ttc binary linguist-language=Font
+*.ttf binary linguist-language=Font
+*.png binary
+*.jpg binary
+*.webp binary

@@ -1,0 +1,56 @@
+===== ABI arm64-v8a =====
+--- libBugly.so (190656 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libBugly_Native.so (195200 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libc++_shared.so (936368 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libffmpegJNI.so (1371000 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libgojni.so (7917840 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libijkcodec.so (268640 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libijkplayer.so (355960 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libmarsxlog.so (662232 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libtvcore.so (1211124 bytes) ---
+[dynamic symbols]
+[interesting strings]
+===== ABI armeabi-v7a =====
+--- libBugly.so (165628 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libBugly_Native.so (182320 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libc++_shared.so (558988 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libffmpegJNI.so (1342608 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libgojni.so (7846584 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libijkcodec.so (143752 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libijkplayer.so (318444 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libmarsxlog.so (346308 bytes) ---
+[dynamic symbols]
+[interesting strings]
+--- libtvcore.so (1025524 bytes) ---
+[dynamic symbols]
+[interesting strings]

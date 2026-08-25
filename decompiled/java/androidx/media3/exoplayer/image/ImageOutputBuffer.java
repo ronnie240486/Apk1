@@ -1,0 +1,16 @@
+package androidx.media3.exoplayer.image;
+
+import android.graphics.Bitmap;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.decoder.DecoderOutputBuffer;
+
+@UnstableApi
+public abstract class ImageOutputBuffer extends DecoderOutputBuffer {
+    public Bitmap bitmap;
+
+    @Override
+    public void clear() {
+        this.bitmap = null;
+        super.clear();
+    }
+}
