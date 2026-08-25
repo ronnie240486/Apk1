@@ -2544,30 +2544,12 @@
     .line 236
     .line 237
     .line 238
-    sget-object p2, Lea/g;->e:Ljava/lang/String;
-
-    .line 239
-    .line 240
+    # MAC12 is the default credential pair shown by this build.
     const-string p3, ""
-
-    .line 241
-    .line 242
-    invoke-static {p2, p3}, Lorg/bitspark/android/utils/m;->g(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
-
-    .line 243
-    .line 244
-    .line 245
-    move-result-object p2
-
-    # Default to MAC12 instead of opening an empty username form.
-    invoke-static {p2}, Landroid/text/TextUtils;->isEmpty(Ljava/lang/CharSequence;)Z
-    move-result v0
-    if-eqz v0, :mac_username_ready
     invoke-virtual {p0}, Landroidx/fragment/app/s;->h()Landroidx/fragment/app/FragmentActivity;
     move-result-object v0
     invoke-static {v0}, Lorg/bitspark/android/MacId;->get12(Landroid/content/Context;)Ljava/lang/String;
     move-result-object p2
-    :mac_username_ready
 
     .line 246
     sget-object v0, Lea/h;->c:Ljava/lang/String;

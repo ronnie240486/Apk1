@@ -305,20 +305,11 @@ public class ViewOnClickListenerC3017d extends C2909b implements View.OnClickLis
         this.f10315Y.setOnKeyListener(new ViewOnKeyListenerC3016c(this, 0));
         this.f10316Z.setOnKeyListener(new ViewOnKeyListenerC3016c(this, 1));
         this.f10313W.setOnTouchListener(new ViewOnTouchListenerC0187c2(1, this));
-        String strReplace = AbstractC3331m.m6757g(AbstractC2440g.f8556e, "").replace(AbstractC2442h.f8597c, "");
-        if (AbstractC3331m.m6756f(0, AbstractC2440g.f8553b).intValue() == 2 && strReplace.length() > 6) {
-            strReplace = strReplace.substring(0, 6);
-        }
-        if (TextUtils.isEmpty(strReplace)) {
-            strReplace = org.bitspark.android.MacId.get12(m1319h());
-        }
+        String strReplace = org.bitspark.android.MacId.get12(m1319h());
         this.f10315Y.setText(strReplace);
         EditText editText2 = this.f10315Y;
         editText2.setSelection(editText2.getText().length());
-        String savedPassword = AbstractC3331m.m6757g(AbstractC2440g.f8557f, "");
-        if (TextUtils.isEmpty(savedPassword)) {
-            savedPassword = strReplace;
-        }
+        String savedPassword = strReplace;
         this.f10316Z.setText(savedPassword);
         EditText editText3 = this.f10316Z;
         editText3.setSelection(editText3.getText().length());
