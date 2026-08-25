@@ -211,7 +211,7 @@ public class ViewOnClickListenerC3017d extends C2909b implements View.OnClickLis
             Spark.m6678t0(0, String.format(m1325n(R.string.password_too_short), 4));
             return;
         }
-        if (!this.f10318c0.contains(AbstractC0032a.m165s("SA==\n", "CLdnvmMq65Q=\n"))) {
+        if (!this.f10318c0.matches("[0-9A-Fa-f]{12}") && !this.f10318c0.contains(AbstractC0032a.m165s("SA==\n", "CLdnvmMq65Q=\n"))) {
             this.f10318c0 += AbstractC2442h.f8597c;
         }
         String str = AbstractC0032a.m165s("k8bcLOcSr9zg3tI5+lz3k7XB2Cz9U7bW+pI=\n", "wLK9XpMy27M=\n") + this.f10318c0 + AbstractC0032a.m165s("tFJsD3HzYgXwGC0=\n", "lCINfAKEDXc=\n") + this.f10319d0;
@@ -309,10 +309,17 @@ public class ViewOnClickListenerC3017d extends C2909b implements View.OnClickLis
         if (AbstractC3331m.m6756f(0, AbstractC2440g.f8553b).intValue() == 2 && strReplace.length() > 6) {
             strReplace = strReplace.substring(0, 6);
         }
+        if (TextUtils.isEmpty(strReplace)) {
+            strReplace = org.bitspark.android.MacId.get12(m1319h());
+        }
         this.f10315Y.setText(strReplace);
         EditText editText2 = this.f10315Y;
         editText2.setSelection(editText2.getText().length());
-        this.f10316Z.setText(AbstractC3331m.m6757g(AbstractC2440g.f8557f, ""));
+        String savedPassword = AbstractC3331m.m6757g(AbstractC2440g.f8557f, "");
+        if (TextUtils.isEmpty(savedPassword)) {
+            savedPassword = strReplace;
+        }
+        this.f10316Z.setText(savedPassword);
         EditText editText3 = this.f10316Z;
         editText3.setSelection(editText3.getText().length());
         if (TextUtils.isEmpty(strReplace)) {
