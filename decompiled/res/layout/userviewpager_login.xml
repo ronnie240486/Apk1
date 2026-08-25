@@ -145,6 +145,8 @@
             android:layout_height="56dp"
             android:layout_marginTop="270dp"
             android:background="@drawable/activation_copy_bg"
+            android:drawableLeft="@drawable/abc_ic_menu_copy_mtrl_am_alpha"
+            android:drawablePadding="12dp"
             android:focusable="true"
             android:text="@string/activation_copy"
             android:textColor="#29130A"

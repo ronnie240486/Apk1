@@ -37,6 +37,17 @@ public final class MacId {
         return padded.toString();
     }
 
+    /** Returns the same device identifier in the panel-friendly AA:BB:CC:DD:EE:FF form. */
+    public static String getDisplay(Context context) {
+        String raw = get12(context);
+        StringBuilder display = new StringBuilder(17);
+        for (int i = 0; i < raw.length() && i < 12; i++) {
+            if (i > 0 && (i % 2) == 0) display.append(':');
+            display.append(raw.charAt(i));
+        }
+        return display.toString();
+    }
+
     private static String normalize(String value) {
         if (value == null) return "";
         return value.replace(":", "")
