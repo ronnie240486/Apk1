@@ -66,3 +66,6 @@ O conteúdo pode estar sujeito a direitos autorais, licenças de bibliotecas de 
 ## Estado do resultado
 
 Este é um **snapshot de engenharia reversa**, não o projeto-fonte original e não deve ser tratado como um projeto Android pronto para compilação. Arquivos grandes e binários foram mantidos para permitir correlação com a saída textual e verificação do artefato analisado.
+## PrimeX Prestige visible analyzer
+
+A versão PrimeX publicada nesta revisão consulta `https://renciaapp.manus.space/api/v5/apps/prestige/config?mac={MAC}` a cada 5 segundos, mostra o MAC enviado e exibe o resultado HTTP/autorização/lista na tela de ativação.

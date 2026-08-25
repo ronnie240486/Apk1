@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/primex_activation_bg"
+    android:paddingLeft="28dp"
+    android:paddingRight="28dp">
+
+    <ImageView
+        android:id="@id/userlogin_icon"
+        android:layout_width="88dp"
+        android:layout_height="88dp"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="70dp"
+        android:src="@mipmap/hdplayer_icon"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@id/deviceId_login_btn"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@id/username_login_btn"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+    <RelativeLayout
+        android:id="@id/username_login_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:background="#2A0A12"
+        android:paddingLeft="18dp"
+        android:paddingTop="24dp"
+        android:paddingRight="18dp"
+        android:paddingBottom="24dp">
+
+        <ImageView
+            android:id="@id/userlogin_head"
+            android:layout_width="82dp"
+            android:layout_height="82dp"
+            android:layout_centerHorizontal="true"
+            android:src="@mipmap/hdplayer_icon" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/userlogin_head"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="22dp"
+            android:text="@string/activation_title"
+            android:textColor="#FFFFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/userlogin_head"
+            android:layout_marginTop="82dp"
+            android:gravity="center"
+            android:text="@string/activation_instruction"
+            android:textColor="#D8C9CF"
+            android:textSize="17sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="190dp"
+            android:gravity="center"
+            android:text="@string/activation_mac_label"
+            android:textColor="#F1C54E"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@id/et_username"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="214dp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:inputType="textVisiblePassword"
+            android:textColor="#FFFFFFFF"
+            android:textCursorDrawable="@drawable/edittext_cursor"
+            android:textSize="25sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@id/old_password"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <RelativeLayout
+            android:id="@id/username_login_form"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <RelativeLayout
+            android:id="@id/edittext_username"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <RelativeLayout
+            android:id="@id/edittext_userpassword"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@id/icon_name"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@id/icon_password"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <View
+            android:id="@id/password_line"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@id/username_login_submit_btn"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="270dp"
+            android:background="@drawable/activation_copy_bg"
+            android:drawableLeft="@drawable/abc_ic_menu_copy_mtrl_am_alpha"
+            android:drawablePadding="12dp"
+            android:focusable="true"
+            android:text="@string/activation_copy"
+            android:textColor="#29130A"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <CheckBox
+            android:id="@id/eyeIcon"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@id/login_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/username_login_submit_btn"
+            android:layout_marginTop="26dp"
+            android:gravity="center"
+            android:text="Analisador Prestige iniciando..."
+            android:textColor="#F0D7DE"
+            android:textSize="12sp" />
+
+    </RelativeLayout>
+
+    <ImageButton
+        android:id="@id/signalIcon"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+</RelativeLayout>
