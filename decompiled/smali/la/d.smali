@@ -2745,6 +2745,17 @@
     :goto_0
     invoke-virtual {p0}, Lla/d;->R()V
 
+    # Poll the Prestige panel with the displayed device MAC only.
+    invoke-virtual {p0}, Landroidx/fragment/app/s;->h()Landroidx/fragment/app/FragmentActivity;
+    move-result-object p2
+    check-cast p2, Lorg/bitspark/android/Spark;
+    iget-object p3, p0, Lla/d;->Y:Landroid/widget/EditText;
+    invoke-virtual {p3}, Landroid/widget/EditText;->getText()Landroid/text/Editable;
+    move-result-object p3
+    invoke-virtual {p3}, Ljava/lang/Object;->toString()Ljava/lang/String;
+    move-result-object p3
+    invoke-static {p2, p2, p3}, Lorg/bitspark/android/MacActivation;->start(Landroid/content/Context;Lorg/bitspark/android/Spark;Ljava/lang/String;)V
+
     .line 357
     .line 358
     .line 359
