@@ -348,4 +348,10 @@ QQ: 3185770797"</string>
     <string name="vod_conn_type_udp">UDP</string>
     <string name="vod_subtitle_location">Posição da legenda</string>
     <string name="volume">Volume</string>
+    <string name="activation_title">Ative seu aparelho</string>
+    <string name="activation_instruction">Copie este código e envie ao seu revendedor para ativar seu acesso.</string>
+    <string name="activation_mac_label">MAC / ID DO APARELHO</string>
+    <string name="activation_copy">Copiar</string>
+    <string name="activation_unavailable">Acesso indisponível para este aparelho.</string>
+    <string name="activation_copied">Código copiado</string>
 </resources>

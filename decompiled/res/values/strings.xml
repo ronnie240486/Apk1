@@ -61,6 +61,12 @@
     <string name="androidx_startup">androidx.startup</string>
     <string name="app_id">CC1AD845</string>
     <string name="app_name">PrimeX</string>
+    <string name="activation_title">Ative seu aparelho</string>
+    <string name="activation_instruction">Copie este código e envie ao seu revendedor para ativar seu acesso.</string>
+    <string name="activation_mac_label">MAC / ID DO APARELHO</string>
+    <string name="activation_copy">Copiar</string>
+    <string name="activation_unavailable">Acesso indisponível para este aparelho.</string>
+    <string name="activation_copied">Código copiado</string>
     <string name="auto_start">Run After Bootup</string>
     <string name="auto_start_off">Off</string>
     <string name="auto_start_on">On</string>

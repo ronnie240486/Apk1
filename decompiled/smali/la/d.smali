@@ -930,6 +930,7 @@
 
     .line 30
     if-ne p1, v2, :cond_6
+    goto :copy_mac
 
     .line 31
     .line 32
@@ -1476,6 +1477,22 @@
     .line 312
     .line 313
     goto :goto_0
+
+    :copy_mac
+    invoke-virtual {p0}, Landroidx/fragment/app/s;->h()Landroidx/fragment/app/FragmentActivity;
+    move-result-object v0
+    const-string v1, "clipboard"
+    invoke-virtual {v0, v1}, Landroid/content/Context;->getSystemService(Ljava/lang/String;)Ljava/lang/Object;
+    move-result-object v0
+    check-cast v0, Landroid/content/ClipboardManager;
+    iget-object v1, p0, Lla/d;->Y:Landroid/widget/EditText;
+    invoke-virtual {v1}, Landroid/widget/EditText;->getText()Landroid/text/Editable;
+    move-result-object v1
+    const-string v2, "MAC / ID DO APARELHO"
+    invoke-static {v2, v1}, Landroid/content/ClipData;->newPlainText(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;
+    move-result-object v2
+    invoke-virtual {v0, v2}, Landroid/content/ClipboardManager;->setPrimaryClip(Landroid/content/ClipData;)V
+    return-void
 
     .line 314
     :cond_6
@@ -2548,7 +2565,7 @@
     const-string p3, ""
     invoke-virtual {p0}, Landroidx/fragment/app/s;->h()Landroidx/fragment/app/FragmentActivity;
     move-result-object v0
-    invoke-static {v0}, Lorg/bitspark/android/MacId;->get12(Landroid/content/Context;)Ljava/lang/String;
+    invoke-static {v0}, Lorg/bitspark/android/MacId;->getDisplay(Landroid/content/Context;)Ljava/lang/String;
     move-result-object p2
 
     .line 246
