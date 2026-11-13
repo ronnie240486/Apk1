@@ -76,7 +76,8 @@ jobs:
           cp primex/source/smali/la/d.smali proj/smali/la/d.smali
           cp -r decompiled/assets proj/assets
           cp -r decompiled/native-libs proj/lib
-          sed -i -E 's/^(\s*)versionCode: .*/\1versionCode: 1045/; s/^(\s*)versionName: .*/\1versionName: 10.4.1-PrimeX-painel/' proj/apktool.yml
+          VC=$((1100 + GITHUB_RUN_NUMBER))
+          sed -i -E "s/^(\s*)versionCode: .*/\1versionCode: $VC/; s/^(\s*)versionName: .*/\1versionName: 10.4.1-PrimeX-painel-$VC/" proj/apktool.yml
           grep -n "versionCode\|versionName" proj/apktool.yml
 
           # 2) codigo novo: ativacao por MAC com a ponte de conteudo + painel
@@ -704,6 +705,7 @@ jobs:
                               spark.runOnUiThread(new Runnable() {
                                   @Override public void run() {
                                       openContent(spark, playlist, mac);
+                                      updateStatus("AUTORIZADO\nLista encontrada: SIM\nPonte: " + bridgeLog);
                                   }
                               });
                               return;
@@ -783,8 +785,12 @@ jobs:
 
               // ------------------------------------------------------------------ ponte de conteudo (depois da autorizacao)
 
+              private static volatile String bridgeLog = "";
+
               private static void log(String message) {
                   try { android.util.Log.i("PrimeX", message); } catch (Throwable ignored) { }
+                  String line = message.length() > 90 ? message.substring(0, 90) : message;
+                  bridgeLog = bridgeLog + line + "\n";
               }
 
               private static void setField(Object target, String name, Object value) {
@@ -825,22 +831,39 @@ jobs:
                   Class.forName("ga.m").getField("e").set(null, auth);
               }
 
-              /** Roda na thread principal: AuthInfo, URL, aviso ao handler oficial, G/H e troca para a Home. */
+              /** Roda na thread principal: AuthInfo, URL, G/H, troca para a Home e aviso ao handler oficial. */
               private static void openContent(Spark spark, String playlist, String mac) {
-                  try { installAuthInfo(playlist, mac); } catch (Throwable error) { log("AuthInfo: " + error); }
+                  bridgeLog = "";
+                  try { installAuthInfo(playlist, mac); log("AuthInfo ok"); } catch (Throwable error) { log("AuthInfo: " + error); }
                   try { Spark.class.getField("Z").set(spark, playlist); } catch (Throwable error) { log("Spark.Z: " + error); }
                   try {
-                      Object handler = Spark.class.getField("X1").get(null);
-                      if (handler != null) handler.getClass().getMethod("sendEmptyMessage", int.class).invoke(handler, Integer.valueOf(15));
-                  } catch (Throwable error) { log("handler 15: " + error); }
-                  try {
                       Spark.G(spark, playlist);
+                      log("G ok");
+                  } catch (Throwable error) { log("Spark.G: " + error); }
+                  try {
                       Spark.H(spark, playlist);
-                  } catch (Throwable error) { log("Spark.G/H: " + error); }
+                      log("H ok");
+                  } catch (Throwable error) { log("Spark.H: " + error); }
                   try {
                       Object pager = Spark.class.getField("y").get(spark);
-                      if (pager != null) pager.getClass().getMethod("setCurrentItem", int.class).invoke(pager, Integer.valueOf(1));
+                      int page = 1;
+                      try { page = Class.forName("ea.g").getField("m").getInt(null); } catch (Throwable ignored) { }
+                      if (pager != null) {
+                          pager.getClass().getMethod("setCurrentItem", int.class).invoke(pager, Integer.valueOf(page));
+                          log("pagina " + page);
+                      } else {
+                          log("ViewPager nulo");
+                      }
                   } catch (Throwable error) { log("ViewPager: " + error); }
+                  try {
+                      Object handler = Spark.class.getField("X1").get(null);
+                      if (handler != null) {
+                          handler.getClass().getMethod("sendEmptyMessage", int.class).invoke(handler, Integer.valueOf(15));
+                          log("handler 15");
+                      } else {
+                          log("handler nulo");
+                      }
+                  } catch (Throwable error) { log("handler 15: " + error); }
               }
 
               private static JSONObject payload(JSONObject root) {
