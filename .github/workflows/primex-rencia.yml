@@ -1,0 +1,861 @@
+name: PrimeX - painel Railway, Assistindo, avisos e comandos
+
+# Enxerta o painel Rencia/Railway no APK pronto do PrimeX (P2Server 10.4.1, appId "prestige"), SEM reconstruir o app:
+#  - ativacao por MAC: Railway primeiro; se o Railway nao responder, usa o Manus de reserva
+#  - heartbeat a cada 60 s (e na hora que muda o que esta tocando) com "Assistindo"; "__idle__" quando nada toca
+#  - avisos do painel, aviso de vencimento e mensagens, com confirmacao (ack)
+#  - comandos remotos (exibir aviso, trocar/atualizar lista, DNS, reiniciar, sincronizar acesso)
+#  - troca de lista quando o painel coloca o cliente na lista reserva (e volta para a principal)
+# O repositorio so tem a desmontagem; o APK de origem e o PrimeX ja pronto (ex.: PrimeX-prestige-r11.apk).
+# Envie esse .apk para a raiz do repositorio (ou use "apk_url" ao rodar manualmente). O APK sai em Actions > (execucao) > Artifacts.
+on:
+  push:
+    paths:
+      - ".github/workflows/primex-rencia.yml"
+      - "*.apk"
+  workflow_dispatch:
+    inputs:
+      apk:
+        description: "APK de origem (caminho dentro do repositorio). Vazio = procura um .apk no repositorio"
+        required: false
+        default: ""
+      apk_url:
+        description: "Ou: link direto para baixar o APK de origem (ex.: anexo de uma Release)"
+        required: false
+        default: ""
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar so os arquivos .apk do repositorio
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            *.apk
+          sparse-checkout-cone-mode: false
+
+      - name: Instalar ferramentas (smali/baksmali e zip)
+        run: |
+          exec > >(tee /tmp/step.log) 2>&1
+          trap 'rc=$?; sleep 1; [ $rc -eq 0 ] || echo "::error title=Falhou::$(tail -n 14 /tmp/step.log | cut -c1-260 | sed "s/%/%25/g" | paste -sd "|" -)"' EXIT
+          sudo apt-get update -q
+          sudo apt-get install -y -q smali zip unzip
+          command -v baksmali && command -v smali
+
+      - name: Chave de assinatura (guardada em cache entre execucoes)
+        uses: actions/cache@v4
+        with:
+          path: primex.keystore
+          key: primex-keystore-v1
+
+      - name: Criar a chave se ainda nao existir
+        run: |
+          if [ ! -f primex.keystore ]; then
+            keytool -genkeypair -v -keystore primex.keystore -storepass primex-test-key -keypass primex-test-key \
+              -alias primex -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=PrimeX Test"
+          fi
+
+      - name: Corrigir o APK
+        env:
+          IN_APK: ${{ inputs.apk }}
+          IN_URL: ${{ inputs.apk_url }}
+        run: |
+          exec > >(tee /tmp/step.log) 2>&1
+          trap 'rc=$?; sleep 1; [ $rc -eq 0 ] || echo "::error title=Falhou::$(tail -n 14 /tmp/step.log | cut -c1-260 | sed "s/%/%25/g" | paste -sd "|" -)"' EXIT
+          set -euo pipefail
+
+          # 0) APK de origem
+          APK=""
+          if [ -n "${IN_APK:-}" ]; then
+            APK="$IN_APK"
+          elif [ -n "${IN_URL:-}" ]; then
+            curl -fL --retry 3 -o base.apk "$IN_URL"
+            APK="base.apk"
+          else
+            APK=$(find . -maxdepth 3 -name '*.apk' -not -path './.git/*' | sort | grep -i primex | tail -n 1 || true)
+            if [ -z "$APK" ]; then APK=$(find . -maxdepth 3 -name '*.apk' -not -path './.git/*' | sort | tail -n 1 || true); fi
+          fi
+          test -n "$APK" || { echo "Nenhum .apk no repositorio. Envie o PrimeX pronto (ex.: PrimeX-prestige-r11.apk) para a raiz do repositorio, ou rode manualmente com apk_url."; exit 1; }
+          test -f "$APK" || { echo "APK nao encontrado: $APK"; exit 1; }
+          echo "APK de origem: $APK ($(stat -c %s "$APK") bytes)"
+
+          mkdir -p work/dex work/new work/jc work/d8 src/org/bitspark/android
+          cd work/dex && unzip -q "../../$APK" 'classes*.dex' && cd ../..
+          grep -aq "Lorg/bitspark/android/MacActivation;" work/dex/classes*.dex || { echo "Este APK nao tem a ativacao por MAC do PrimeX (org/bitspark/android/MacActivation). Use o PrimeX pronto, nao o P2Server original."; exit 1; }
+
+          cat > patch_primex.py <<'PYEOF'
+          """Patches de smali do PrimeX (P2Server 10.4.1 / appId prestige).
+          Uso: python3 patch_primex.py <pasta_smali> <arquivo_de_relatorio>
+          Roda sobre a pasta gerada pelo baksmali do dex que tem org/bitspark/android/MacActivation.
+          Cada patch aplicado e anotado no relatorio; o workflow confere no fim que todos entraram."""
+          import glob
+          import os
+          import re
+          import sys
+
+          OLD = "https://renciaapp.manus.space"
+          NEW = "https://renciaapp-production.up.railway.app"
+          PANEL = "Lorg/bitspark/android/PrimexPanel;"
+
+          START_RE = re.compile(
+              r"^\.method public static (?:declared-synchronized )?start\("
+              r"Landroid/content/Context;Lorg/bitspark/android/Spark;Ljava/lang/String;[^)]*\)V\s*$")
+          OPEN_RE = re.compile(r"invoke-virtual \{(\w+)\}, Ljava/net/URL;->openConnection\(\)Ljava/net/URLConnection;")
+
+
+          def read(path):
+              with open(path, encoding="utf-8") as f:
+                  return f.read()
+
+
+          def write(path, text):
+              with open(path, "w", encoding="utf-8", newline="\n") as f:
+                  f.write(text)
+
+
+          def find_classes(root):
+              base = os.path.join(root, "org", "bitspark", "android")
+              main = os.path.join(base, "MacActivation.smali")
+              if not os.path.isfile(main):
+                  return []
+              return [main] + sorted(glob.glob(os.path.join(base, "MacActivation$*.smali")))
+
+
+          def param_words(descriptor):
+              """Numero de registradores dos parametros (J e D ocupam 2)."""
+              params = descriptor[descriptor.index("(") + 1:descriptor.index(")")]
+              n = 0
+              i = 0
+              while i < len(params):
+                  c = params[i]
+                  if c == "L":
+                      i = params.index(";", i)
+                      n += 1
+                  elif c == "[":
+                      while params[i] == "[":
+                          i += 1
+                      if params[i] == "L":
+                          i = params.index(";", i)
+                      n += 1
+                  elif c in "JD":
+                      n += 2
+                  else:
+                      n += 1
+                  i += 1
+              return n
+
+
+          def hook_start(text, report):
+              """Insere PrimexPanel.start(context, mac) no comeco de MacActivation.start(Context, Spark, String[, ...])."""
+              lines = text.split("\n")
+              out = []
+              i = 0
+              count = 0
+              while i < len(lines):
+                  line = lines[i]
+                  out.append(line)
+                  if START_RE.match(line):
+                      descriptor = line.split("start", 1)[1].strip()
+                      words = param_words(descriptor)
+                      i += 1
+                      # diretiva de registradores
+                      while i < len(lines) and not re.match(r"\s*\.(registers|locals)\s+\d+", lines[i]):
+                          out.append(lines[i])
+                          i += 1
+                      m = re.match(r"\s*\.(registers|locals)\s+(\d+)", lines[i])
+                      total = int(m.group(2)) + (words if m.group(1) == "locals" else 0)
+                      assert total <= 16, "start() com registradores demais para invoke-static simples: %d" % total
+                      out.append(lines[i])
+                      i += 1
+                      # pula anotacoes/.param/.line/.prologue ate a primeira instrucao ou rotulo
+                      while i < len(lines):
+                          s = lines[i].strip()
+                          if s == "" or s.startswith(".line") or s.startswith(".prologue"):
+                              out.append(lines[i])
+                              i += 1
+                          elif s.startswith(".annotation"):
+                              while not lines[i].strip().startswith(".end annotation"):
+                                  out.append(lines[i])
+                                  i += 1
+                              out.append(lines[i])
+                              i += 1
+                          elif s.startswith(".param"):
+                              out.append(lines[i])
+                              i += 1
+                              nxt = lines[i].strip() if i < len(lines) else ""
+                              if nxt.startswith(".annotation"):
+                                  while not lines[i].strip().startswith(".end param"):
+                                      out.append(lines[i])
+                                      i += 1
+                                  out.append(lines[i])
+                                  i += 1
+                          else:
+                              break
+                      out.append("    # ---- PrimeX: liga o painel Rencia/Railway (heartbeat, avisos, comandos) ----")
+                      out.append("    invoke-static {p0, p2}, %s->start(Landroid/content/Context;Ljava/lang/String;)V" % PANEL)
+                      out.append("")
+                      count += 1
+                      continue
+                  i += 1
+              assert count >= 1, "MacActivation.start(Context, Spark, String...) nao encontrado"
+              report.add("gancho_start")
+              return "\n".join(out)
+
+
+          def patch_all(root, report):
+              files = find_classes(root)
+              assert files, "MacActivation.smali nao encontrado neste dex"
+              urls = 0
+              opens = 0
+              for path in files:
+                  text = read(path)
+                  n = text.count(OLD)
+                  if n:
+                      text = text.replace(OLD, NEW)
+                      urls += n
+                  text, k = OPEN_RE.subn(
+                      "invoke-static {\\1}, %s->open(Ljava/net/URL;)Ljava/net/URLConnection;" % PANEL, text)
+                  opens += k
+                  if os.path.basename(path) == "MacActivation.smali":
+                      text = hook_start(text, report)
+                  write(path, text)
+              assert urls >= 1, "endereco do Manus nao encontrado em MacActivation"
+              assert opens >= 1, "URL.openConnection() nao encontrado na ativacao por MAC"
+              report.add("painel_railway")
+              report.add("reserva_manus")
+
+
+          def lint(root):
+              """Confere o basico do smali alterado: .method/.end method em par e rotulos definidos."""
+              for path in find_classes(root):
+                  t = read(path)
+                  assert len(re.findall(r"^\.method ", t, re.M)) == len(re.findall(r"^\.end method", t, re.M)), os.path.basename(path) + ": .method sem par"
+                  for m in re.finditer(r"^\.method .*?^\.end method", t, re.M | re.S):
+                      body = m.group(0)
+                      defined = set(re.findall(r"^\s*(:[A-Za-z0-9_]+)\s*$", body, re.M))
+                      used = set(re.findall(r"[ ,{](:[A-Za-z0-9_]+)", re.sub(r"^\s*:[A-Za-z0-9_]+\s*$", "", body, flags=re.M)))
+                      used = {u for u in used if not u.startswith("::")}
+                      missing = used - defined
+                      assert not missing, os.path.basename(path) + ": rotulo sem definicao " + str(missing)
+
+
+          def main():
+              root, out = sys.argv[1], sys.argv[2]
+              report = set()
+              patch_all(root, report)
+              lint(root)
+              with open(out, "a") as f:
+                  for item in sorted(report):
+                      f.write(item + "\n")
+              print("Patches deste dex:", sorted(report))
+
+
+          if __name__ == "__main__":
+              main()
+          PYEOF
+
+          cat > src/org/bitspark/android/PrimexPanel.java <<'JEOF'
+          package org.bitspark.android;
+
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.app.Application;
+          import android.content.Context;
+          import android.content.DialogInterface;
+          import android.content.SharedPreferences;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.view.View;
+          import android.widget.TextView;
+          import android.widget.Toast;
+
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+
+          import java.io.BufferedReader;
+          import java.io.InputStream;
+          import java.io.InputStreamReader;
+          import java.io.OutputStream;
+          import java.lang.ref.WeakReference;
+          import java.lang.reflect.Method;
+          import java.lang.reflect.Modifier;
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.net.URLConnection;
+          import java.net.URLEncoder;
+          import java.nio.charset.StandardCharsets;
+          import java.util.HashSet;
+          import java.util.Set;
+          import java.util.concurrent.Callable;
+          import java.util.concurrent.Executors;
+          import java.util.concurrent.FutureTask;
+          import java.util.concurrent.ScheduledExecutorService;
+          import java.util.concurrent.TimeUnit;
+
+          /**
+           * PrimeX (P2Server) ligado ao painel Rencia/Railway:
+           *  - "Assistindo": manda o titulo do que esta tocando (ou __idle__ quando nada toca), na hora e a cada 60 s;
+           *  - avisos, aviso de vencimento e mensagens do painel na tela, com confirmacao;
+           *  - comandos remotos (exibir aviso, trocar/atualizar lista, DNS, reiniciar, sincronizar acesso);
+           *  - troca de lista quando o painel coloca o cliente na lista reserva (e volta para a principal);
+           *  - open(): Railway primeiro; se o Railway nao responder, a ativacao por MAC cai no Manus.
+           * Nao depende de nenhuma classe do app em tempo de compilacao (so reflexao): se algum nome mudar,
+           * esse recurso fica parado, mas o app continua normal.
+           */
+          public final class PrimexPanel {
+              private static final String[] BASES = {
+                      "https://renciaapp-production.up.railway.app",
+                      "https://renciaapp.manus.space"
+              };
+              private static final String APP_ID = "prestige";
+              private static final String IDLE = "__idle__";
+              private static final String PREFS = "primex_panel_prefs";
+              private static final String SPARK = "org.bitspark.android.Spark";
+
+              private static final Handler MAIN = new Handler(Looper.getMainLooper());
+              private static final Object LOCK = new Object();
+              private static final Set<Long> SHOWN_ALERTS = new HashSet<Long>();
+
+              private static Context app;
+              private static ScheduledExecutorService executor;
+              private static volatile WeakReference<Activity> top = new WeakReference<Activity>(null);
+              private static volatile String mac = "";
+              private static volatile boolean started;
+              private static volatile boolean sendAppId = true;
+              private static volatile String lastSent = null;
+              private static volatile long lastCycleAt;
+              private static volatile boolean reloading;
+
+              // saude do Railway para a ativacao por MAC (open)
+              private static volatile long primaryCheckedAt;
+              private static volatile boolean primaryOk = true;
+
+              private PrimexPanel() {}
+
+              // ------------------------------------------------------------------ ganchos chamados pelo app
+
+              /** MacActivation.start(context, spark, mac, ...): a tela de ativacao abriu com este MAC. */
+              public static void start(Context context, String macValue) {
+                  try {
+                      if (context == null || macValue == null) return;
+                      String m = macValue.trim();
+                      if (m.length() == 0) return;
+                      mac = m;
+                      synchronized (LOCK) {
+                          if (started) return;
+                          started = true;
+                          app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
+                      }
+                      try {
+                          if (app instanceof Application) {
+                              ((Application) app).registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+                                  @Override public void onActivityResumed(Activity a) { top = new WeakReference<Activity>(a); }
+                                  @Override public void onActivityPaused(Activity a) {
+                                      if (top.get() == a) top = new WeakReference<Activity>(null);
+                                  }
+                                  @Override public void onActivityCreated(Activity a, Bundle b) {}
+                                  @Override public void onActivityStarted(Activity a) { if (top.get() == null) top = new WeakReference<Activity>(a); }
+                                  @Override public void onActivityStopped(Activity a) {}
+                                  @Override public void onActivitySaveInstanceState(Activity a, Bundle b) {}
+                                  @Override public void onActivityDestroyed(Activity a) {}
+                              });
+                          }
+                      } catch (Throwable ignored) {
+                      }
+                      if (context instanceof Activity) top = new WeakReference<Activity>((Activity) context);
+                      executor = Executors.newSingleThreadScheduledExecutor();
+                      executor.scheduleWithFixedDelay(new Runnable() {
+                          @Override public void run() { tick(); }
+                      }, 3, 5, TimeUnit.SECONDS);
+                  } catch (Throwable ignored) {
+                  }
+              }
+
+              /**
+               * Substitui URL.openConnection() dentro da ativacao por MAC: usa o Railway e, se ele nao
+               * responder com JSON (queda, 5xx, pagina de erro), usa o Manus. A checagem fica em cache por 60 s.
+               */
+              public static URLConnection open(URL url) throws java.io.IOException {
+                  try {
+                      String s = url.toString();
+                      if (s.startsWith(BASES[0]) && Looper.myLooper() != Looper.getMainLooper() && !primaryHealthy()) {
+                          url = new URL(BASES[1] + s.substring(BASES[0].length()));
+                      }
+                  } catch (Throwable ignored) {
+                  }
+                  return url.openConnection();
+              }
+
+              private static boolean primaryHealthy() {
+                  long now = System.currentTimeMillis();
+                  if (now - primaryCheckedAt < 60000L) return primaryOk;
+                  boolean ok = false;
+                  HttpURLConnection c = null;
+                  try {
+                      c = (HttpURLConnection) new URL(BASES[0] + "/api/v5/apps/" + APP_ID + "/config?mac=00%3A00%3A00%3A00%3A00%3A00").openConnection();
+                      c.setConnectTimeout(5000);
+                      c.setReadTimeout(6000);
+                      c.setUseCaches(false);
+                      c.setRequestProperty("Accept", "application/json");
+                      int code = c.getResponseCode();
+                      InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                      String text = in == null ? "" : read(in).trim();
+                      ok = code < 500 && text.startsWith("{");
+                  } catch (Throwable ignored) {
+                      ok = false;
+                  } finally {
+                      if (c != null) c.disconnect();
+                  }
+                  primaryOk = ok;
+                  primaryCheckedAt = now;
+                  return ok;
+              }
+
+              // ------------------------------------------------------------------ ciclo
+
+              private static void tick() {
+                  try {
+                      if (mac.length() == 0) return;
+                      String content = currentContent();
+                      long now = System.currentTimeMillis();
+                      boolean cycleDue = now - lastCycleAt >= 60000L;
+                      boolean changed = lastSent == null || !content.equals(lastSent);
+                      if (!cycleDue && !changed) return;
+                      sendHeartbeat(content);
+                      if (cycleDue) {
+                          lastCycleAt = now;
+                          handleNotifications();
+                      }
+                  } catch (Throwable ignored) {
+                  }
+              }
+
+              private static JSONObject sendHeartbeat(String content) {
+                  String m = mac;
+                  if (m.length() == 0) return null;
+                  lastSent = content;
+                  JSONObject response = getWithAppId("/api/v5/heartbeat?mac=" + enc(m) + "&current_content=" + enc(content));
+                  if (response != null) handleCommand(response.optJSONObject("command"), m);
+                  return response;
+              }
+
+              // ------------------------------------------------------------------ "Assistindo" (le a tela do player)
+
+              private static String currentContent() {
+                  try {
+                      FutureTask<String> task = new FutureTask<String>(new Callable<String>() {
+                          @Override public String call() { return readScreen(); }
+                      });
+                      MAIN.post(task);
+                      String r = task.get(2500, TimeUnit.MILLISECONDS);
+                      return r == null || r.length() == 0 ? IDLE : r;
+                  } catch (Throwable t) {
+                      return lastSent == null ? IDLE : lastSent;
+                  }
+              }
+
+              /** Roda na thread principal. Devolve o titulo do que esta tocando ou IDLE. */
+              private static String readScreen() {
+                  Activity a = top.get();
+                  if (a == null || a.isFinishing()) return IDLE;
+                  View root = a.getWindow() == null ? null : a.getWindow().getDecorView();
+                  if (root == null) return IDLE;
+                  View player = find(root, "play_layout");
+                  if (player == null || !player.isShown()) return IDLE;
+                  String name = text(find(root, "program_name"));
+                  if (name.length() == 0 || "name".equals(name)) {
+                      name = text(find(root, "tv_live_channel_name"));
+                      String live = text(find(root, "tv_live_name"));
+                      if (live.length() > 0) name = name.length() > 0 && !name.equals(live) ? live + " - " + name : live;
+                  }
+                  return name.length() == 0 ? "Reproduzindo" : name;
+              }
+
+              private static View find(View root, String idName) {
+                  try {
+                      Context c = root.getContext();
+                      int id = c.getResources().getIdentifier(idName, "id", c.getPackageName());
+                      return id == 0 ? null : root.findViewById(id);
+                  } catch (Throwable t) {
+                      return null;
+                  }
+              }
+
+              private static String text(View v) {
+                  if (!(v instanceof TextView) || !v.isAttachedToWindow()) return "";
+                  CharSequence s = ((TextView) v).getText();
+                  return s == null ? "" : s.toString().trim();
+              }
+
+              // ------------------------------------------------------------------ avisos, vencimento, troca de lista
+
+              private static void handleNotifications() throws Exception {
+                  String m = mac;
+                  if (m.length() == 0) return;
+                  JSONObject payload = get("/api/v5/list-notifications?mac=" + enc(m));
+                  if (payload == null || !payload.optBoolean("success", false)) return;
+
+                  SharedPreferences prefs = prefs();
+                  long transitionId = payload.optLong("failover_transition_id", 0L);
+                  boolean syncRequired = payload.optBoolean("playlist_sync_required", false);
+                  boolean restored = "primary_restored".equalsIgnoreCase(payload.optString("failover_state", ""));
+                  long seen = prefs == null ? 0L : prefs.getLong("failover_transition_id", 0L);
+                  boolean already = transitionId > 0L && transitionId == seen;
+                  if ((syncRequired || restored) && transitionId > 0L && !already) {
+                      int number = payload.optInt("active_list_number", 0);
+                      if (prefs != null) prefs.edit().putLong("failover_transition_id", transitionId).apply();
+                      int wanted = number - 1;
+                      if (wanted >= 0 && wanted != activeIndex()) {
+                          toast(restored ? "Lista principal restaurada" : "Lista reserva ativada");
+                          reloadList(wanted);
+                          return;
+                      }
+                  }
+
+                  JSONObject expiration = payload.optJSONObject("expiration");
+                  if (expiration != null && expiration.optBoolean("show_modal", false)) {
+                      String key = expiration.optString("modal_key", "");
+                      String shown = prefs == null ? "" : prefs.getString("expiration_key", "");
+                      if (key.length() > 0 && !key.equals(shown)) {
+                          if (showDialog(expiration.optString("modal_title", "Aviso"), expiration.optString("modal_message", ""))) {
+                              if (prefs != null) prefs.edit().putString("expiration_key", key).apply();
+                          }
+                      }
+                  }
+
+                  JSONArray list = payload.optJSONArray("notifications");
+                  if (list != null) {
+                      for (int i = 0; i < list.length(); i++) {
+                          JSONObject n = list.optJSONObject(i);
+                          if (n == null || n.optBoolean("acknowledged", false)) continue;
+                          long id = n.optLong("id", 0L);
+                          if (id <= 0L) continue;
+                          synchronized (SHOWN_ALERTS) { if (SHOWN_ALERTS.contains(id)) continue; }
+                          if (showDialog(n.optString("title", "Aviso"), n.optString("message", ""))) {
+                              synchronized (SHOWN_ALERTS) { SHOWN_ALERTS.add(id); }
+                              JSONObject body = new JSONObject();
+                              body.put("mac", m);
+                              body.put("alert_id", id);
+                              post("/api/v5/list-notifications/ack", body);
+                          }
+                      }
+                  }
+              }
+
+              // ------------------------------------------------------------------ comandos remotos
+
+              private static void handleCommand(JSONObject command, String m) {
+                  try {
+                      if (command == null) {
+                          JSONObject r = getWithAppId("/api/v5/remote-commands?mac=" + enc(m));
+                          command = r == null ? null : r.optJSONObject("command");
+                      }
+                      if (command == null) return;
+                      int id = command.optInt("id", 0);
+                      if (id <= 0) return;
+                      String type = command.optString("type", "");
+                      JSONObject p = command.optJSONObject("payload");
+                      if (p == null) p = new JSONObject();
+                      String status = "executed";
+                      String result = "";
+                      if ("show_message".equals(type)) {
+                          String msg = p.optString("message", "");
+                          String title = p.optString("title", "Aviso");
+                          if (msg.length() == 0) { status = "failed"; result = "Mensagem vazia"; }
+                          else if (!showDialog(title.length() == 0 ? "Aviso" : title, msg)) { return; } // sem tela: tenta no proximo ciclo
+                      } else if ("switch_playlist".equals(type)) {
+                          int idx = p.optInt("listIndex", p.optInt("list_index", 0)) - 1;
+                          if (idx < 0) { status = "failed"; result = "Lista invalida"; }
+                          else {
+                              ack(m, id, status, "Trocando para a lista " + (idx + 1));
+                              reloadList(idx);
+                              return;
+                          }
+                      } else if ("refresh_playlist".equals(type) || "update_dns".equals(type)
+                              || "sync_access".equals(type) || "restart_player".equals(type)) {
+                          ack(m, id, status, "Recarregando a lista");
+                          reloadList(Math.max(0, activeIndex()));
+                          return;
+                      } else {
+                          status = "failed";
+                          result = "Comando nao suportado: " + type;
+                      }
+                      ack(m, id, status, result);
+                  } catch (Throwable ignored) {
+                  }
+              }
+
+              private static void ack(String m, int id, String status, String message) {
+                  try {
+                      JSONObject body = new JSONObject();
+                      body.put("mac", m);
+                      body.put("command_id", id);
+                      body.put("status", status);
+                      body.put("app", APP_ID);
+                      if (message != null && message.length() > 0) body.put("result_message", message);
+                      post("/api/v5/remote-commands/ack", body);
+                  } catch (Throwable ignored) {
+                  }
+              }
+
+              // ------------------------------------------------------------------ recarregar lista (mesmo caminho da ativacao)
+
+              private static int activeIndex() {
+                  SharedPreferences p = prefs();
+                  return p == null ? 0 : p.getInt("active_index", 0);
+              }
+
+              /** Busca as listas atuais do MAC no painel e abre a de numero index (0 = primeira) como a ativacao faz. */
+              private static void reloadList(final int index) {
+                  if (reloading) return;
+                  reloading = true;
+                  final String m = mac;
+                  new Thread(new Runnable() {
+                      @Override public void run() {
+                          try {
+                              JSONObject root = getWithAppId("/api/v5/apps/" + APP_ID + "/config?mac=" + enc(m));
+                              if (root == null) { reloading = false; return; }
+                              JSONObject data = root.optJSONObject("data");
+                              JSONObject payload = data != null && (data.has("playlist_urls") || data.has("playlist_url")) ? data : root;
+                              String url = null;
+                              JSONArray urls = payload.optJSONArray("playlist_urls");
+                              int target = index;
+                              if (urls != null && urls.length() > 0) {
+                                  if (target < 0 || target >= urls.length()) target = 0;
+                                  url = urls.optString(target, "");
+                              } else {
+                                  target = 0;
+                                  url = payload.optString("playlist_url", "");
+                              }
+                              if (url == null || url.length() == 0) { reloading = false; return; }
+                              final String playlist = url;
+                              final int chosen = target;
+                              MAIN.post(new Runnable() {
+                                  @Override public void run() { openPlaylist(playlist, chosen); }
+                              });
+                          } catch (Throwable t) {
+                              reloading = false;
+                          }
+                      }
+                  }, "primex-reload").start();
+              }
+
+              /** Spark.G(spark, url) + Spark.H(spark, url): o mesmo par que a ativacao por MAC usa para abrir a lista. */
+              private static void openPlaylist(String playlist, int index) {
+                  try {
+                      Activity a = top.get();
+                      if (a == null || !a.getClass().getName().equals(SPARK)) { reloading = false; return; }
+                      Class<?> spark = Class.forName(SPARK);
+                      Method g = null, h = null;
+                      for (Method mt : spark.getDeclaredMethods()) {
+                          Class<?>[] t = mt.getParameterTypes();
+                          if (!Modifier.isStatic(mt.getModifiers()) || t.length != 2 || t[0] != spark || t[1] != String.class) continue;
+                          if (mt.getName().equals("G")) g = mt;
+                          if (mt.getName().equals("H")) h = mt;
+                      }
+                      if (g == null || h == null) { reloading = false; return; }
+                      g.setAccessible(true);
+                      h.setAccessible(true);
+                      g.invoke(null, a, playlist);
+                      h.invoke(null, a, playlist);
+                      SharedPreferences p = prefs();
+                      if (p != null) p.edit().putInt("active_index", index).apply();
+                  } catch (Throwable ignored) {
+                  } finally {
+                      MAIN.postDelayed(new Runnable() {
+                          @Override public void run() { reloading = false; }
+                      }, 5000L);
+                  }
+              }
+
+              // ------------------------------------------------------------------ tela
+
+              /** Mostra um aviso na tela. Devolve false se nao ha tela aberta agora (tenta de novo no proximo ciclo). */
+              private static boolean showDialog(final String title, final String message) {
+                  final Activity a = top.get();
+                  if (a == null || a.isFinishing()) return false;
+                  if (message == null || message.trim().length() == 0) return true;
+                  MAIN.post(new Runnable() {
+                      @Override public void run() {
+                          try {
+                              if (a.isFinishing()) return;
+                              AlertDialog.Builder b = new AlertDialog.Builder(a, AlertDialog.THEME_DEVICE_DEFAULT_DARK);
+                              b.setTitle(title == null || title.length() == 0 ? "Aviso" : title);
+                              b.setMessage(message);
+                              b.setCancelable(true);
+                              b.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                                  @Override public void onClick(DialogInterface d, int w) { d.dismiss(); }
+                              });
+                              b.show();
+                          } catch (Throwable ignored) {
+                          }
+                      }
+                  });
+                  return true;
+              }
+
+              private static void toast(final String text) {
+                  MAIN.post(new Runnable() {
+                      @Override public void run() {
+                          try {
+                              Context c = top.get() != null ? top.get() : app;
+                              if (c != null) Toast.makeText(c, text, Toast.LENGTH_LONG).show();
+                          } catch (Throwable ignored) {
+                          }
+                      }
+                  });
+              }
+
+              private static SharedPreferences prefs() {
+                  try {
+                      return app.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+                  } catch (Throwable t) {
+                      return null;
+                  }
+              }
+
+              // ------------------------------------------------------------------ HTTP (Railway primeiro, Manus de reserva)
+
+              private static String enc(String s) {
+                  try { return URLEncoder.encode(s, "UTF-8"); } catch (Exception e) { return s; }
+              }
+
+              /** GET com app_id; se o painel disser que o MAC nao e desse app, repete sem app_id. */
+              private static JSONObject getWithAppId(String path) {
+                  if (sendAppId) {
+                      JSONObject r = get(path + "&app_id=" + APP_ID);
+                      if (r != null && !r.optBoolean("success", true) && r.optString("message", "").contains("vinculado")) {
+                          sendAppId = false;
+                      } else {
+                          return r;
+                      }
+                  }
+                  return get(path);
+              }
+
+              private static JSONObject get(String path) {
+                  return request("GET", path, null);
+              }
+
+              private static JSONObject post(String path, JSONObject body) {
+                  return request("POST", path, body);
+              }
+
+              private static JSONObject request(String method, String path, JSONObject body) {
+                  for (int i = 0; i < BASES.length; i++) {
+                      HttpURLConnection c = null;
+                      try {
+                          c = (HttpURLConnection) new URL(BASES[i] + path).openConnection();
+                          c.setRequestMethod(method);
+                          c.setConnectTimeout(8000);
+                          c.setReadTimeout(12000);
+                          c.setUseCaches(false);
+                          c.setRequestProperty("Accept", "application/json");
+                          if (body != null) {
+                              c.setDoOutput(true);
+                              c.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+                              OutputStream os = c.getOutputStream();
+                              os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+                              os.close();
+                          }
+                          int code = c.getResponseCode();
+                          InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                          String text = in == null ? "" : read(in).trim();
+                          if (code >= 500) continue;               // erro do servidor: tenta o reserva
+                          if (!text.startsWith("{")) continue;     // HTML/lixo: tenta o reserva
+                          return new JSONObject(text);             // 2xx e 4xx sao respostas de verdade
+                      } catch (Throwable ignored) {
+                      } finally {
+                          if (c != null) c.disconnect();
+                      }
+                  }
+                  return null;
+              }
+
+              private static String read(InputStream in) throws Exception {
+                  BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+                  StringBuilder sb = new StringBuilder();
+                  String line;
+                  while ((line = r.readLine()) != null) sb.append(line);
+                  r.close();
+                  return sb.toString();
+              }
+          }
+          JEOF
+
+          # 1) smali: so o(s) dex que tem a ativacao por MAC
+          : > work/applied.txt
+          CHANGED=""
+          for F in work/dex/classes*.dex; do
+            NAME=$(basename "$F")
+            if grep -aq "Lorg/bitspark/android/MacActivation;" "$F"; then
+              echo "== $NAME"
+              baksmali d "$F" -o "work/smali_$NAME"
+              python3 -I patch_primex.py "work/smali_$NAME" work/applied.txt
+              VER=$(head -c 7 "$F" | tail -c 3)
+              case "$VER" in 037) API=24 ;; 038) API=26 ;; 039) API=28 ;; *) API=15 ;; esac
+              echo "dex $NAME versao $VER -> smali --api $API"
+              smali a --api "$API" "work/smali_$NAME" -o "work/new/$NAME"
+              CHANGED="$CHANGED $NAME"
+            fi
+          done
+          test -n "$CHANGED" || { echo "Nenhum dex com a ativacao por MAC"; exit 1; }
+          sort -u work/applied.txt > work/applied_u.txt
+          echo "Patches aplicados:"; cat work/applied_u.txt
+          for P in gancho_start painel_railway reserva_manus; do
+            grep -qx "$P" work/applied_u.txt || { echo "ERRO: patch '$P' nao foi aplicado"; exit 1; }
+          done
+
+          # 2) codigo novo (painel): compila e vira um dex a parte
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          ANDROID_JAR=$(ls "$ANDROID_SDK_ROOT"/platforms/android-*/android.jar | sort -V | tail -1)
+          echo "build-tools: $BT | android.jar: $ANDROID_JAR"
+          javac -nowarn -Xlint:-options --release 8 -cp "$ANDROID_JAR" -d work/jc src/org/bitspark/android/PrimexPanel.java
+          "$BT/d8" --release --min-api 21 --lib "$ANDROID_JAR" --output work/d8 $(find work/jc -name '*.class')
+          NDEX=$(ls work/dex/classes*.dex | wc -l)
+          NEWDEX="classes$((NDEX + 1)).dex"
+          cp work/d8/classes.dex "work/new/$NEWDEX"
+          CHANGED="$CHANGED $NEWDEX"
+          echo "Dex novo do painel: $NEWDEX"
+
+          # 3) monta o APK
+          cp "$APK" work/unsigned.apk
+          zip -q -d work/unsigned.apk 'META-INF/*' || true
+          (cd work/new && zip -q ../unsigned.apk $CHANGED)
+          "$BT/zipalign" -p -f 4 work/unsigned.apk work/aligned.apk
+          OUT="PrimeX-painel.apk"
+          "$BT/apksigner" sign --ks primex.keystore --ks-key-alias primex \
+            --ks-pass pass:primex-test-key --key-pass pass:primex-test-key \
+            --out "$OUT" work/aligned.apk
+          "$BT/apksigner" verify --verbose "$OUT"
+          unzip -tq "$OUT"
+          "$BT/aapt2" dump badging "$OUT" | head -n 3
+
+          # conferencia final dentro do APK pronto
+          python3 -I - <<'PYEOF'
+          import zipfile
+          z = zipfile.ZipFile("PrimeX-painel.apk")
+          names = z.namelist()
+          dexnames = [n for n in names if n.startswith("classes") and n.endswith(".dex")]
+          raws = {n: z.read(n) for n in dexnames}
+          dex = b"".join(raws.values())
+          assert b"renciaapp-production.up.railway.app" in dex, "Railway nao encontrado no APK final"
+          holders = [n for n, r in raws.items() if b"Lorg/bitspark/android/PrimexPanel;" in r and b"__idle__" in r and b"primex_panel_prefs" in r]
+          assert holders, "Codigo do painel ausente no APK final"
+          # o Manus so pode aparecer como reserva dentro do painel
+          for n, r in raws.items():
+              if b"renciaapp.manus.space" in r:
+                  assert b"Lorg/bitspark/android/PrimexPanel;" in r, "Manus fora da reserva em " + n
+          assert b"/api/v5/heartbeat" in dex and b"/api/v5/list-notifications" in dex and b"/api/v5/remote-commands" in dex, "Rotas do painel ausentes"
+          assert "AndroidManifest.xml" in names and "resources.arsc" in names
+          print("OK: Railway primeiro, Manus de reserva, __idle__, avisos e comandos presentes (dex do painel:", holders, ")")
+          PYEOF
+          sha256sum "$OUT"
+
+      - name: Guardar o APK ajustado
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrimeX-painel
+          path: PrimeX-painel.apk
